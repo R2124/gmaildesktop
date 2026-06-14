@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self';" />
+  <title>Gmail Desktop Cleaner</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">✉︎</span>
+      <div>
+        <h1>Gmail Desktop Cleaner</h1>
+        <p class="sub">Local · encrypted · your data never leaves this machine</p>
+      </div>
+    </div>
+    <div class="account">
+      <span id="account-email" class="email">Not signed in</span>
+      <button id="btn-signout" class="ghost" hidden>Sign out</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- Setup / sign-in panel -->
+    <section id="setup" class="card" hidden>
+      <h2>Setup</h2>
+      <p class="muted">
+        This tool uses Google's official Gmail API with an OAuth "Desktop app" client that
+        <strong>you</strong> create. Paste its Client ID and Secret below — they are encrypted with
+        your OS keychain and stored only on this computer.
+        <a href="https://console.cloud.google.com/apis/credentials" id="open-console">Open Google Cloud Console ↗</a>
+      </p>
+      <div id="enc-warning" class="warn" hidden>
+        ⚠ OS-level encryption is unavailable on this machine; secrets will be stored with weak
+        obfuscation only. Consider running on a system with a keychain/secret service.
+      </div>
+      <div class="field">
+        <label>Client ID</label>
+        <input id="client-id" type="text" placeholder="xxxxxxxx.apps.googleusercontent.com" autocomplete="off" />
+      </div>
+      <div class="field">
+        <label>Client Secret</label>
+        <input id="client-secret" type="password" placeholder="GOCSPX-..." autocomplete="off" />
+      </div>
+      <div class="row">
+        <button id="btn-save-client" class="primary">Save credentials</button>
+        <button id="btn-signin" class="primary" disabled>Sign in with Google</button>
+      </div>
+      <details class="help">
+        <summary>How to create the OAuth client (one time)</summary>
+        <ol>
+          <li>Go to Google Cloud Console → APIs &amp; Services.</li>
+          <li>Enable the <em>Gmail API</em>.</li>
+          <li>Configure the OAuth consent screen (External, add your email as a test user).</li>
+          <li>Create Credentials → OAuth client ID → <strong>Desktop app</strong>.</li>
+          <li>Copy the Client ID and Client Secret here.</li>
+        </ol>
+      </details>
+    </section>
+
+    <!-- Main workspace -->
+    <section id="workspace" hidden>
+      <div class="dashboard">
+        <div class="stat"><span id="stat-messages">—</span><label>Total messages</label></div>
+        <div class="stat"><span id="stat-threads">—</span><label>Threads</label></div>
+        <div class="stat"><span id="stat-selected">0</span><label>Selected</label></div>
+        <div class="stat"><span id="stat-reclaim">0 B</span><label>Reclaimable</label></div>
+      </div>
+
+      <div class="grid">
+        <!-- Filters -->
+        <aside class="card filters">
+          <h2>Find emails</h2>
+
+          <div class="field">
+            <label>Older than</label>
+            <select id="f-olderThan">
+              <option value="">Any age</option>
+              <option value="30d">30 days</option>
+              <option value="90d">90 days</option>
+              <option value="180d">6 months</option>
+              <option value="1y" selected>1 year</option>
+              <option value="2y">2 years</option>
+              <option value="5y">5 years</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label>Larger than (heavy emails)</label>
+            <select id="f-largerThan">
+              <option value="">Any size</option>
+              <option value="1">1 MB</option>
+              <option value="5" selected>5 MB</option>
+              <option value="10">10 MB</option>
+              <option value="20">20 MB</option>
+            </select>
+          </div>
+
+          <fieldset class="field">
+            <label>Categories</label>
+            <label class="check"><input type="checkbox" class="cat" value="promotions" checked /> Promotions</label>
+            <label class="check"><input type="checkbox" class="cat" value="social" checked /> Social</label>
+            <label class="check"><input type="checkbox" class="cat" value="updates" /> Updates</label>
+            <label class="check"><input type="checkbox" class="cat" value="forums" /> Forums</label>
+          </fieldset>
+
+          <div class="field">
+            <label class="check"><input type="checkbox" id="f-unread" /> Unread only (likely unused)</label>
+            <label class="check"><input type="checkbox" id="f-attach" /> Has attachment</label>
+            <label class="check"><input type="checkbox" id="f-incStarred" /> Include starred</label>
+            <label class="check"><input type="checkbox" id="f-incImportant" /> Include important</label>
+          </div>
+
+          <div class="field">
+            <label>Advanced Gmail query (optional)</label>
+            <input id="f-custom" type="text" placeholder="e.g. from:newsletter@" autocomplete="off" />
+          </div>
+
+          <button id="btn-scan" class="primary block">Scan</button>
+          <p id="query-preview" class="muted mono"></p>
+        </aside>
+
+        <!-- Results + actions -->
+        <div class="card results">
+          <div class="results-head">
+            <h2>Candidates</h2>
+            <div class="results-tools">
+              <label class="check"><input type="checkbox" id="select-all" /> Select all</label>
+              <span id="results-summary" class="muted"></span>
+            </div>
+          </div>
+
+          <div id="results-list" class="list">
+            <div class="empty">Run a scan to find old, unused, or heavy emails.</div>
+          </div>
+
+          <div class="actions">
+            <div class="action-settings">
+              <label class="check"><input type="checkbox" id="opt-backup" checked /> Download &amp; back up before deleting</label>
+              <div class="backup-row">
+                <input id="backup-dir" type="text" readonly placeholder="No backup folder selected" />
+                <button id="btn-choose-dir" class="ghost small">Choose…</button>
+              </div>
+              <label>Delete mode
+                <select id="opt-deleteMode">
+                  <option value="trash" selected>Move to Trash (recoverable 30 days)</option>
+                  <option value="permanent">Permanently delete (frees space now)</option>
+                </select>
+              </label>
+            </div>
+            <div class="action-buttons">
+              <button id="btn-dryrun" class="ghost">Dry run</button>
+              <button id="btn-run" class="danger" disabled>Download &amp; Delete selected</button>
+              <button id="btn-empty-trash" class="ghost">Empty Trash</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Progress / log overlay -->
+  <div id="overlay" class="overlay" hidden>
+    <div class="overlay-card">
+      <h3 id="overlay-title">Working…</h3>
+      <div class="progressbar"><div id="overlay-bar"></div></div>
+      <p id="overlay-status" class="muted mono"></p>
+      <pre id="overlay-log" class="log"></pre>
+      <button id="overlay-close" class="ghost" hidden>Close</button>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>

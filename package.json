@@ -1,0 +1,36 @@
+{
+  "name": "gmail-desktop-cleaner",
+  "version": "1.0.0",
+  "description": "Secure local desktop tool to back up and delete old, unused, and heavy Gmail messages to free up storage.",
+  "main": "src/main/main.js",
+  "author": "",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --enable-logging",
+    "check": "node scripts/syntax-check.js",
+    "dist": "electron-builder",
+    "pack": "electron-builder --dir"
+  },
+  "build": {
+    "appId": "com.gmaildesktop.cleaner",
+    "productName": "Gmail Desktop Cleaner",
+    "files": [
+      "src/**/*",
+      "!**/*.map"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "mac": { "category": "public.app-category.utilities", "target": "dmg" },
+    "win": { "target": "nsis" },
+    "linux": { "target": "AppImage", "category": "Utility" }
+  },
+  "dependencies": {
+    "googleapis": "^144.0.0"
+  },
+  "devDependencies": {
+    "electron": "^31.0.0",
+    "electron-builder": "^24.13.3"
+  }
+}
