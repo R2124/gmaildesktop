@@ -65,6 +65,7 @@
       <div class="dashboard">
         <div class="stat"><span id="stat-messages">—</span><label>Total messages</label></div>
         <div class="stat"><span id="stat-threads">—</span><label>Threads</label></div>
+        <div class="stat"><span id="stat-duplicates">0</span><label>Duplicates</label></div>
         <div class="stat"><span id="stat-selected">0</span><label>Selected</label></div>
         <div class="stat"><span id="stat-reclaim">0 B</span><label>Reclaimable</label></div>
       </div>
@@ -119,21 +120,34 @@
           </div>
 
           <button id="btn-scan" class="primary block">Scan</button>
+          <button id="btn-bulk" class="danger block" title="Download &amp; delete EVERY message matching these filters, not just the ones shown">Bulk delete ALL matches</button>
           <p id="query-preview" class="muted mono"></p>
         </aside>
 
         <!-- Results + actions -->
         <div class="card results">
           <div class="results-head">
-            <h2>Candidates</h2>
-            <div class="results-tools">
-              <label class="check"><input type="checkbox" id="select-all" /> Select all</label>
-              <span id="results-summary" class="muted"></span>
+            <div class="tabs">
+              <button class="tab active" data-view="messages">Messages</button>
+              <button class="tab" data-view="duplicates">Duplicates <span id="tab-dup-count" class="badge">0</span></button>
+              <button class="tab" data-view="senders">By sender</button>
             </div>
+            <span id="results-summary" class="muted"></span>
+          </div>
+
+          <div class="results-controls">
+            <label class="check"><input type="checkbox" id="select-all" /> Select all</label>
+            <button id="btn-select-dups" class="ghost small">Select duplicates</button>
+            <span id="dup-keep-wrap" class="muted small-inline" hidden>Keep
+              <select id="dup-keep">
+                <option value="newest">newest</option>
+                <option value="oldest">oldest</option>
+              </select>
+            </span>
           </div>
 
           <div id="results-list" class="list">
-            <div class="empty">Run a scan to find old, unused, or heavy emails.</div>
+            <div class="empty">Run a scan to find old, unused, heavy, or duplicate emails.</div>
           </div>
 
           <div class="actions">

@@ -9,6 +9,7 @@ const fs = require('fs');
 const path = require('path');
 const { google } = require('googleapis');
 const { getAuthorizedClient } = require('./auth');
+const Analyze = require('../shared/analyze');
 
 function gmailClient() {
   const auth = getAuthorizedClient();
@@ -67,36 +68,36 @@ function header(payload, name) {
   return h ? h.value : '';
 }
 
+/** List every message ID matching a query, paginating with no cap. */
+async function listAllIds(gmail, q, { cap = Infinity, onProgress } = {}) {
+  const ids = [];
+  let pageToken;
+  do {
+    const res = await withRetry(() =>
+      gmail.users.messages.list({ userId: 'me', q, maxResults: 500, pageToken })
+    );
+    for (const m of res.data.messages || []) ids.push(m.id);
+    pageToken = res.data.nextPageToken;
+    if (onProgress) onProgress({ phase: 'listing', found: ids.length });
+    if (ids.length >= cap) break;
+  } while (pageToken);
+  return ids;
+}
+
 /**
- * Scan for candidate messages. Returns a capped list of message summaries plus
- * an estimate of total reclaimable size. `onProgress` reports pages scanned.
+ * Scan for candidate messages. Returns a capped list of enriched message
+ * summaries (with classification tags) plus an estimate of total reclaimable
+ * size. `onProgress` reports progress.
  */
 async function scan(filters, { maxResults = 1000, onProgress } = {}) {
   const gmail = gmailClient();
   const q = buildQuery(filters);
 
   // 1) Collect message IDs (paginated).
-  const ids = [];
-  let pageToken;
-  do {
-    const res = await withRetry(() =>
-      gmail.users.messages.list({
-        userId: 'me',
-        q,
-        maxResults: 500,
-        pageToken,
-      })
-    );
-    const batch = res.data.messages || [];
-    for (const m of batch) ids.push(m.id);
-    pageToken = res.data.nextPageToken;
-    if (onProgress) onProgress({ phase: 'listing', found: ids.length });
-    if (ids.length >= maxResults) break;
-  } while (pageToken);
-
+  const ids = await listAllIds(gmail, q, { cap: maxResults, onProgress });
   const limited = ids.slice(0, maxResults);
 
-  // 2) Fetch lightweight metadata (incl. sizeEstimate) for each.
+  // 2) Fetch lightweight metadata (incl. sizeEstimate) for each, then classify.
   const messages = [];
   let totalBytes = 0;
   let processed = 0;
@@ -110,13 +111,14 @@ async function scan(filters, { maxResults = 1000, onProgress } = {}) {
           userId: 'me',
           id,
           format: 'metadata',
-          metadataHeaders: ['From', 'Subject', 'Date'],
+          metadataHeaders: ['From', 'Subject', 'Date', 'Message-ID', 'List-Unsubscribe', 'Content-Type'],
         })
       );
       const d = res.data;
       const size = d.sizeEstimate || 0;
       totalBytes += size;
-      messages.push({
+      const contentType = header(d.payload, 'Content-Type');
+      const msg = {
         id: d.id,
         threadId: d.threadId,
         sizeEstimate: size,
@@ -124,8 +126,14 @@ async function scan(filters, { maxResults = 1000, onProgress } = {}) {
         from: header(d.payload, 'From'),
         subject: header(d.payload, 'Subject') || '(no subject)',
         date: header(d.payload, 'Date'),
+        internalDate: d.internalDate || null,
+        messageId: header(d.payload, 'Message-ID'),
+        listUnsubscribe: !!header(d.payload, 'List-Unsubscribe'),
+        hasAttachment: /multipart\/mixed/i.test(contentType),
         labelIds: d.labelIds || [],
-      });
+      };
+      msg.tags = Analyze.classify(msg);
+      messages.push(msg);
       processed++;
       if (onProgress && processed % 25 === 0) {
         onProgress({ phase: 'metadata', processed, total: limited.length });
@@ -138,12 +146,17 @@ async function scan(filters, { maxResults = 1000, onProgress } = {}) {
 
   messages.sort((a, b) => b.sizeEstimate - a.sizeEstimate);
 
+  // Duplicate analysis over the scanned set.
+  const dup = Analyze.findDuplicates(messages, { keep: 'newest' });
+
   return {
     query: q,
     count: messages.length,
     totalMatched: ids.length,
     truncated: ids.length > limited.length,
     totalBytes,
+    duplicateCount: dup.totalDuplicates,
+    duplicateBytes: dup.reclaimBytes,
     messages,
   };
 }
@@ -283,6 +296,21 @@ async function processMessages(messageIds, options, onProgress = () => {}) {
   return result;
 }
 
+/**
+ * Bulk path: process EVERY message matching a query, beyond the on-screen cap.
+ * Lists all matching IDs first, reports the count, then backs up + deletes.
+ */
+async function bulkProcessByQuery(filters, options, onProgress = () => {}) {
+  const gmail = gmailClient();
+  const q = buildQuery(filters);
+  const ids = await listAllIds(gmail, q, { onProgress });
+  onProgress({ phase: 'listing', found: ids.length, done: true });
+  const result = await processMessages(ids, options, onProgress);
+  result.matched = ids.length;
+  result.query = q;
+  return result;
+}
+
 /** Permanently empty the Trash to immediately free the space it occupies. */
 async function emptyTrash(onProgress = () => {}) {
   const gmail = gmailClient();
@@ -321,6 +349,7 @@ module.exports = {
   buildQuery,
   scan,
   processMessages,
+  bulkProcessByQuery,
   emptyTrash,
   getProfile,
 };

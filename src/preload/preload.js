@@ -1,6 +1,7 @@
 'use strict';
 
 const { contextBridge, ipcRenderer } = require('electron');
+const Analyze = require('../shared/analyze');
 
 /**
  * Minimal, explicit bridge. The renderer can only call these named channels —
@@ -17,8 +18,16 @@ contextBridge.exposeInMainWorld('api', {
   profile: () => ipcRenderer.invoke('gmail:profile'),
   scan: (filters, opts) => ipcRenderer.invoke('gmail:scan', filters, opts),
   process: (ids, options) => ipcRenderer.invoke('gmail:process', ids, options),
+  bulkProcess: (filters, options) => ipcRenderer.invoke('gmail:bulkProcess', filters, options),
   emptyTrash: () => ipcRenderer.invoke('gmail:emptyTrash'),
   openPath: (p) => ipcRenderer.invoke('shell:openPath', p),
+
+  // Pure, in-process analysis helpers (no network) shared with the main process.
+  analyze: {
+    findDuplicates: (messages, opts) => Analyze.findDuplicates(messages, opts),
+    groupBySender: (messages) => Analyze.groupBySender(messages),
+    parseFrom: (from) => Analyze.parseFrom(from),
+  },
 
   onScanProgress: (cb) => {
     const h = (_e, p) => cb(p);

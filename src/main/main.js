@@ -125,6 +125,18 @@ ipcMain.handle('gmail:process', wrap(async (messageIds, options) => {
   return gmail.processMessages(messageIds, merged, (p) => send('progress:process', p));
 }));
 
+ipcMain.handle('gmail:bulkProcess', wrap(async (filters, options) => {
+  const settings = store.getSettings();
+  const merged = {
+    backup: options.backup ?? settings.backupBeforeDelete,
+    backupDir: options.backupDir || settings.backupDir,
+    deleteMode: options.deleteMode || settings.deleteMode,
+    concurrency: settings.concurrency,
+    dryRun: !!options.dryRun,
+  };
+  return gmail.bulkProcessByQuery(filters, merged, (p) => send('progress:process', p));
+}));
+
 ipcMain.handle('gmail:emptyTrash', wrap(async () => {
   return gmail.emptyTrash((p) => send('progress:process', p));
 }));

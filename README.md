@@ -19,13 +19,22 @@ endpoints.
 - 🔎 **Smart scanning** by age (`older_than`), size (`larger:`), category
   (Promotions/Social/Updates/Forums), read/unread, attachments, plus any custom
   Gmail search query.
+- 🏷️ **Email identification** — every message is auto-classified with tags
+  (`heavy`, `newsletter`, `unread`, `old`, `attachment`, category) and can be
+  viewed grouped **by sender** for fast bulk decisions.
+- 🧬 **Duplicate detection** — content fingerprinting (sender + normalized
+  subject + size) finds duplicate/resent copies, keeps the newest (or oldest),
+  and selects the rest for removal in one click.
+- ☑️ **Bulk deletion** — select all, select per-sender, select all duplicates,
+  or **Bulk delete ALL matches** to process the entire query result (thousands
+  of messages) beyond the on-screen list.
 - 💾 **Download before delete** — each message is saved as a complete `.eml`
   (headers + body + attachments), so nothing is lost.
 - 🗑️ **Two delete modes** — *Move to Trash* (recoverable 30 days) or
   *Permanently delete* (frees space immediately via `messages.batchDelete`).
 - 🧹 **Empty Trash** to reclaim space right away.
 - 👀 **Dry run** and per-action confirmations; starred/important mail excluded by default.
-- 📊 Live mailbox stats and reclaimable-size estimate.
+- 📊 Live mailbox stats, duplicate count, and reclaimable-size estimate.
 
 ---
 
@@ -86,8 +95,11 @@ src/
 ├── main/
 │   ├── main.js     Electron entry, window, IPC routing
 │   ├── auth.js     OAuth2 loopback sign-in + token refresh
-│   ├── gmail.js    scan / backup (.eml) / trash / batchDelete / empty trash
+│   ├── gmail.js    scan / backup (.eml) / trash / batchDelete / bulk / empty trash
 │   └── store.js    safeStorage-encrypted local store (client, token, settings)
+├── shared/
+│   └── analyze.js  dependency-free identification / dedup / grouping logic
+│                   (used by both main process and UI — single source of truth)
 ├── preload/
 │   └── preload.js  contextBridge: the only API surface exposed to the UI
 └── renderer/       sandboxed UI (no Node access)
