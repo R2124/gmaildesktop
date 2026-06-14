@@ -24,7 +24,9 @@ endpoints.
   viewed grouped **by sender** for fast bulk decisions.
 - 🧬 **Duplicate detection** — content fingerprinting (sender + normalized
   subject + size) finds duplicate/resent copies, keeps the newest (or oldest),
-  and selects the rest for removal in one click.
+  and selects the rest for removal in one click. A **Deep scan whole mailbox**
+  mode sweeps the entire account (up to 20,000 messages) to find duplicates
+  everywhere, not just in the current filtered scan.
 - ☑️ **Bulk deletion** — select all, select per-sender, select all duplicates,
   or **Bulk delete ALL matches** to process the entire query result (thousands
   of messages) beyond the on-screen list.

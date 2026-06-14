@@ -137,6 +137,10 @@ ipcMain.handle('gmail:bulkProcess', wrap(async (filters, options) => {
   return gmail.bulkProcessByQuery(filters, merged, (p) => send('progress:process', p));
 }));
 
+ipcMain.handle('gmail:deepDupScan', wrap(async (options) => {
+  return gmail.deepDuplicateScan(options || {}, (p) => send('progress:scan', p));
+}));
+
 ipcMain.handle('gmail:emptyTrash', wrap(async () => {
   return gmail.emptyTrash((p) => send('progress:process', p));
 }));

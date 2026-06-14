@@ -311,6 +311,84 @@ async function bulkProcessByQuery(filters, options, onProgress = () => {}) {
   return result;
 }
 
+/**
+ * Deep duplicate scan: sweep (almost) the entire mailbox, fetch metadata for
+ * every message, and find duplicates across the whole account — not just a
+ * single filtered scan. Heavy, so it is capped and reports progress.
+ *
+ * options: { keep, maxMessages, query }
+ * Returns only the duplicate groups (keeps the payload small).
+ */
+async function deepDuplicateScan(options = {}, onProgress = () => {}) {
+  const gmail = gmailClient();
+  const keep = options.keep || 'newest';
+  const maxMessages = options.maxMessages || 20000;
+  // Exclude trash/spam/chats by default; honor an optional extra query.
+  const q = ['-in:trash', '-in:spam', '-in:chats', options.query]
+    .filter(Boolean)
+    .join(' ');
+
+  const ids = await listAllIds(gmail, q, {
+    cap: maxMessages,
+    onProgress: (p) => onProgress({ phase: 'listing', found: p.found }),
+  });
+
+  const messages = [];
+  let processed = 0;
+  const concurrency = 15;
+
+  async function worker(queue) {
+    while (queue.length) {
+      const id = queue.pop();
+      try {
+        const res = await withRetry(() =>
+          gmail.users.messages.get({
+            userId: 'me',
+            id,
+            format: 'metadata',
+            metadataHeaders: ['From', 'Subject', 'Date', 'Message-ID', 'List-Unsubscribe', 'Content-Type'],
+          })
+        );
+        const d = res.data;
+        const contentType = header(d.payload, 'Content-Type');
+        const msg = {
+          id: d.id,
+          threadId: d.threadId,
+          sizeEstimate: d.sizeEstimate || 0,
+          from: header(d.payload, 'From'),
+          subject: header(d.payload, 'Subject') || '(no subject)',
+          date: header(d.payload, 'Date'),
+          internalDate: d.internalDate || null,
+          messageId: header(d.payload, 'Message-ID'),
+          listUnsubscribe: !!header(d.payload, 'List-Unsubscribe'),
+          hasAttachment: /multipart\/mixed/i.test(contentType),
+          labelIds: d.labelIds || [],
+        };
+        msg.tags = Analyze.classify(msg);
+        messages.push(msg);
+      } catch (err) {
+        // Skip individual failures; keep sweeping.
+      }
+      processed++;
+      if (processed % 50 === 0) onProgress({ phase: 'metadata', processed, total: ids.length });
+    }
+  }
+
+  const queue = ids.slice();
+  await Promise.all(Array.from({ length: concurrency }, () => worker(queue)));
+
+  const dup = Analyze.findDuplicates(messages, { keep });
+  return {
+    scanned: messages.length,
+    totalMatched: ids.length,
+    truncated: ids.length >= maxMessages,
+    groups: dup.groups,
+    duplicateIds: dup.duplicateIds,
+    reclaimBytes: dup.reclaimBytes,
+    totalDuplicates: dup.totalDuplicates,
+  };
+}
+
 /** Permanently empty the Trash to immediately free the space it occupies. */
 async function emptyTrash(onProgress = () => {}) {
   const gmail = gmailClient();
@@ -350,6 +428,7 @@ module.exports = {
   scan,
   processMessages,
   bulkProcessByQuery,
+  deepDuplicateScan,
   emptyTrash,
   getProfile,
 };

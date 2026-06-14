@@ -19,6 +19,7 @@ contextBridge.exposeInMainWorld('api', {
   scan: (filters, opts) => ipcRenderer.invoke('gmail:scan', filters, opts),
   process: (ids, options) => ipcRenderer.invoke('gmail:process', ids, options),
   bulkProcess: (filters, options) => ipcRenderer.invoke('gmail:bulkProcess', filters, options),
+  deepDupScan: (options) => ipcRenderer.invoke('gmail:deepDupScan', options),
   emptyTrash: () => ipcRenderer.invoke('gmail:emptyTrash'),
   openPath: (p) => ipcRenderer.invoke('shell:openPath', p),
 

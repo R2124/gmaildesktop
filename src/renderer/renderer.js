@@ -254,6 +254,40 @@ async function runDelete(dryRun) {
   }
 }
 
+async function deepDuplicateScan() {
+  const MAX = 20000;
+  if (!window.confirm(
+    `Deep scan will read metadata for up to ${MAX.toLocaleString()} messages across your whole mailbox ` +
+    `(excluding Trash/Spam) to find duplicates everywhere.\n\n` +
+    `This makes many Gmail API calls and can take several minutes. Continue?`
+  )) return;
+
+  showOverlay('Deep duplicate scan…');
+  try {
+    const res = await api.deepDupScan({ keep: state.dupKeep, maxMessages: MAX });
+    if (!res.ok) throw new Error(res.error);
+    const d = res.data;
+    // Flatten the keeper+duplicate messages from every group into the workspace.
+    const seen = new Map();
+    for (const g of d.groups) for (const m of g.messages) if (!seen.has(m.id)) seen.set(m.id, m);
+    state.messages = Array.from(seen.values()).sort((a, b) => b.sizeEstimate - a.sizeEstimate);
+    recomputeAnalysis(); // reproduces the same groups locally; honors keep toggle
+    state.selected = new Set(state.duplicates.duplicateIds); // pre-select duplicates
+    state.view = 'duplicates';
+    $('results-summary').textContent =
+      `Swept ${d.totalMatched.toLocaleString()} messages` +
+      (d.truncated ? ` (capped at ${MAX.toLocaleString()})` : '') +
+      ` · ${d.totalDuplicates} duplicates · ${fmtBytes(d.reclaimBytes)} reclaimable`;
+    renderResults();
+    $('overlay').hidden = true;
+    toast(`Deep scan: ${d.totalDuplicates} duplicates found`, 'success');
+  } catch (err) {
+    logOverlay('Error: ' + err.message);
+    finishOverlay();
+    toast(err.message, 'error');
+  }
+}
+
 async function bulkDeleteAll() {
   const filters = readFilters();
   const opts = confirmDelete('ALL', ' matching the current filters (this can be thousands and is not limited to the list shown)');
@@ -386,6 +420,8 @@ function wire() {
     recomputeAnalysis();
     renderResults();
   });
+
+  $('btn-deep-dup').addEventListener('click', deepDuplicateScan);
 
   $('btn-select-dups').addEventListener('click', () => {
     state.duplicates.duplicateIds.forEach((id) => state.selected.add(id));
